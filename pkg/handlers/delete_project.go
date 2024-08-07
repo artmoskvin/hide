@@ -12,10 +12,13 @@ type DeleteProjectHandler struct {
 }
 
 func (h DeleteProjectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
 
 	// TODO: check if project exists
-	result := <-h.Manager.DeleteProject(projectId)
+	result := <-h.Manager.DeleteProject(projectID)
 
 	if result.IsFailure() {
 		http.Error(w, fmt.Sprintf("Failed to delete project: %s", result.Error), http.StatusInternalServerError)

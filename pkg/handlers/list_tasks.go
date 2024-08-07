@@ -12,8 +12,12 @@ type ListTasksHandler struct {
 }
 
 func (h ListTasksHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
-	project, err := h.Manager.GetProject(projectId)
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
+
+	project, err := h.Manager.GetProject(projectID)
 
 	if err != nil {
 		http.Error(w, "Project not found", http.StatusNotFound)

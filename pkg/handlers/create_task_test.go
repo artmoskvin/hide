@@ -12,6 +12,7 @@ import (
 	"github.com/artmoskvin/hide/pkg/handlers"
 	"github.com/artmoskvin/hide/pkg/project"
 	"github.com/artmoskvin/hide/pkg/project/mocks"
+	"github.com/gorilla/mux"
 )
 
 func TestCreateTaskHandler_Command_Success(t *testing.T) {
@@ -31,11 +32,13 @@ func TestCreateTaskHandler_Command_Success(t *testing.T) {
 	*requestBody.Command = "test command"
 
 	body, _ := json.Marshal(requestBody)
-	request, _ := http.NewRequest("POST", "/ignored", bytes.NewBuffer(body))
+	request, _ := http.NewRequest("POST", "/projects/123/tasks", bytes.NewBuffer(body))
 	response := httptest.NewRecorder()
+	router := mux.NewRouter()
+	router.Handle("/projects/{id}/tasks", handler).Methods("POST")
 
 	// Execute
-	handler.ServeHTTP(response, request)
+	router.ServeHTTP(response, request)
 
 	// Verify
 	if response.Code != http.StatusOK {

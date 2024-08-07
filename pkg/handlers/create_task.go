@@ -31,7 +31,11 @@ type CreateTaskHandler struct {
 }
 
 func (h CreateTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
+
 	var request TaskRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -47,7 +51,7 @@ func (h CreateTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var command string
 
 	if request.Alias != nil {
-		task, err := h.Manager.ResolveTaskAlias(projectId, *request.Alias)
+		task, err := h.Manager.ResolveTaskAlias(projectID, *request.Alias)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to resolve task alias: %s", err), http.StatusBadRequest)
 			return
@@ -57,8 +61,7 @@ func (h CreateTaskHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		command = *request.Command
 	}
 
-	taskResult, err := h.Manager.CreateTask(projectId, command)
-
+	taskResult, err := h.Manager.CreateTask(projectID, command)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to run task %s", err), http.StatusInternalServerError)
 		return

@@ -70,8 +70,15 @@ type UpdateFileHandler struct {
 }
 
 func (h UpdateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
-	filePath := r.PathValue("path")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
+
+	filePath, err := getFilePath(r)
+	if err != nil {
+		http.Error(w, "invalid file path", http.StatusBadRequest)
+	}
 
 	var request UpdateFileRequest
 
@@ -89,7 +96,7 @@ func (h UpdateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch request.Type {
 	case Udiff:
-		updatedFile, err := h.ProjectManager.ApplyPatch(r.Context(), projectId, filePath, request.Udiff.Patch)
+		updatedFile, err := h.ProjectManager.ApplyPatch(r.Context(), projectID, filePath, request.Udiff.Patch)
 		if err != nil {
 			var projectNotFoundError *project.ProjectNotFoundError
 			if errors.As(err, &projectNotFoundError) {
@@ -103,7 +110,7 @@ func (h UpdateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		file = updatedFile
 	case LineDiff:
 		lineDiff := request.LineDiff
-		updatedFile, err := h.ProjectManager.UpdateLines(r.Context(), projectId, filePath, files.LineDiffChunk{StartLine: lineDiff.StartLine, EndLine: lineDiff.EndLine, Content: lineDiff.Content})
+		updatedFile, err := h.ProjectManager.UpdateLines(r.Context(), projectID, filePath, files.LineDiffChunk{StartLine: lineDiff.StartLine, EndLine: lineDiff.EndLine, Content: lineDiff.Content})
 		if err != nil {
 			var projectNotFoundError *project.ProjectNotFoundError
 			if errors.As(err, &projectNotFoundError) {
@@ -116,7 +123,7 @@ func (h UpdateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		file = updatedFile
 	case Overwrite:
-		updatedFile, err := h.ProjectManager.UpdateFile(r.Context(), projectId, filePath, request.Overwrite.Content)
+		updatedFile, err := h.ProjectManager.UpdateFile(r.Context(), projectID, filePath, request.Overwrite.Content)
 		if err != nil {
 			var projectNotFoundError *project.ProjectNotFoundError
 			if errors.As(err, &projectNotFoundError) {

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 
 	"github.com/artmoskvin/hide/pkg/files"
 	"github.com/artmoskvin/hide/pkg/project"
@@ -17,8 +15,16 @@ type ReadFileHandler struct {
 }
 
 func (h ReadFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
-	filePath := r.PathValue("path")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
+
+	filePath, err := getFilePath(r)
+	if err != nil {
+		http.Error(w, "invalid file path", http.StatusBadRequest)
+	}
+
 	queryParams := r.URL.Query()
 
 	showLineNumbers, err := parseBoolQueryParam(queryParams, "showLineNumbers", files.DefaultShowLineNumbers)
@@ -42,7 +48,7 @@ func (h ReadFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := h.ProjectManager.ReadFile(r.Context(), projectId, filePath, files.NewReadProps(
+	file, err := h.ProjectManager.ReadFile(r.Context(), projectID, filePath, files.NewReadProps(
 		func(props *files.ReadProps) {
 			props.ShowLineNumbers = showLineNumbers
 			props.StartLine = startLine
@@ -64,36 +70,4 @@ func (h ReadFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(file)
-}
-
-func parseIntQueryParam(params url.Values, paramName string, defaultValue int) (int, error) {
-	param := params.Get(paramName)
-
-	if param == "" {
-		return defaultValue, nil
-	}
-
-	value, err := strconv.Atoi(param)
-
-	if err != nil {
-		return 0, fmt.Errorf("Failed to parse %s: %w", paramName, err)
-	}
-
-	return value, nil
-}
-
-func parseBoolQueryParam(params url.Values, paramName string, defaultValue bool) (bool, error) {
-	param := params.Get(paramName)
-
-	if param == "" {
-		return defaultValue, nil
-	}
-
-	value, err := strconv.ParseBool(param)
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to parse %s: %w", paramName, err)
-	}
-
-	return value, nil
 }

@@ -18,7 +18,11 @@ type CreateFileHandler struct {
 }
 
 func (h CreateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
+
 	var request CreateFileRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -26,8 +30,7 @@ func (h CreateFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := h.ProjectManager.CreateFile(r.Context(), projectId, request.Path, request.Content)
-
+	file, err := h.ProjectManager.CreateFile(r.Context(), projectID, request.Path, request.Content)
 	if err != nil {
 		var projectNotFoundError *project.ProjectNotFoundError
 		if errors.As(err, &projectNotFoundError) {

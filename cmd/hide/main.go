@@ -2,12 +2,20 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
+
+	"github.com/docker/docker/client"
+	"github.com/gorilla/mux"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/artmoskvin/hide/pkg/devcontainer"
 	"github.com/artmoskvin/hide/pkg/files"
@@ -15,10 +23,6 @@ import (
 	"github.com/artmoskvin/hide/pkg/model"
 	"github.com/artmoskvin/hide/pkg/project"
 	"github.com/artmoskvin/hide/pkg/util"
-	"github.com/docker/docker/client"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -31,6 +35,7 @@ func main() {
 
 	envPath := flag.String("env", DefaultDotEnvPath, "path to the .env file")
 	debug := flag.Bool("debug", false, "run service in a debug mode")
+	port := flag.Int("port", 8080, "service port")
 	flag.Parse()
 
 	setupLogger(*debug)
@@ -61,14 +66,13 @@ func main() {
 		log.Warn().Msg("DOCKER_USER or DOCKER_TOKEN environment variables are empty. This might cause problems when pulling images from Docker Hub.")
 	}
 
-	mux := http.NewServeMux()
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatal().Err(err).Msg("Cannot initialize docker client")
 	}
 
-	context := context.Background()
-	containerRunner := devcontainer.NewDockerRunner(dockerClient, util.NewExecutorImpl(), context, devcontainer.DockerRunnerConfig{Username: dockerUser, Password: dockerToken})
+	ctx := context.Background()
+	containerRunner := devcontainer.NewDockerRunner(dockerClient, util.NewExecutorImpl(), ctx, devcontainer.DockerRunnerConfig{Username: dockerUser, Password: dockerToken})
 	projectStore := project.NewInMemoryStore(make(map[string]*model.Project))
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -89,23 +93,46 @@ func main() {
 	deleteFileHandler := handlers.DeleteFileHandler{ProjectManager: projectManager}
 	listFilesHandler := handlers.ListFilesHandler{ProjectManager: projectManager}
 
-	mux.Handle("POST /projects", createProjectHandler)
-	mux.Handle("DELETE /projects/{id}", deleteProjectHandler)
-	mux.Handle("POST /projects/{id}/tasks", createTaskHandler)
-	mux.Handle("GET /projects/{id}/tasks", listTasksHandler)
-	mux.Handle("POST /projects/{id}/files", createFileHandler)
-	mux.Handle("GET /projects/{id}/files", listFilesHandler)
-	mux.Handle("GET /projects/{id}/files/{path...}", readFileHandler)
-	mux.Handle("PUT /projects/{id}/files/{path...}", updateFileHandler)
-	mux.Handle("DELETE /projects/{id}/files/{path...}", deleteFileHandler)
+	router := mux.NewRouter()
+	router.Handle("/projects", createProjectHandler).Methods("POST")
+	router.Handle("/projects/{id}", deleteProjectHandler).Methods("DELETE")
+	router.Handle("/projects/{id}/tasks", createTaskHandler).Methods("POST")
+	router.Handle("/projects/{id}/tasks", listTasksHandler).Methods("GET")
+	router.Handle("/projects/{id}/files", createFileHandler).Methods("POST")
+	router.Handle("/projects/{id}/files", listFilesHandler).Methods("GET")
+	router.Handle("/projects/{id}/files/{path:.*}", readFileHandler).Methods("GET")
+	router.Handle("/projects/{id}/files/{path:.*}", updateFileHandler).Methods("PUT")
+	router.Handle("/projects/{id}/files/{path:.*}", deleteFileHandler).Methods("DELETE")
 
-	// TODO: make configurable
-	port := ":8080"
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 
-	log.Info().Msgf("Server started on %s\n", port)
+	server := &http.Server{
+		Handler:      router,
+		Addr:         addr,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
 
-	if err := http.ListenAndServe(port, mux); err != nil {
-		log.Fatal().Err(err).Str("port", port).Msg("Failed to start server")
+	log.Info().Msgf("Server started on %s\n", addr)
+
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		log.Info().Msg("Server shutting down ...")
+		projectManager.Cleanup()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Warn().Err(err).Msgf("HTTP shutdown error: %v", err)
+		}
+	}()
+
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal().Err(err).Msgf("HTTP server error: %v", err)
 	}
 }
 

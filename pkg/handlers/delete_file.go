@@ -12,10 +12,17 @@ type DeleteFileHandler struct {
 }
 
 func (h DeleteFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	projectId := r.PathValue("id")
-	filePath := r.PathValue("path")
+	projectID, err := getProjectID(r)
+	if err != nil {
+		http.Error(w, "invalid project ID", http.StatusBadRequest)
+	}
 
-	if err := h.ProjectManager.DeleteFile(r.Context(), projectId, filePath); err != nil {
+	filePath, err := getFilePath(r)
+	if err != nil {
+		http.Error(w, "invalid file path", http.StatusBadRequest)
+	}
+
+	if err := h.ProjectManager.DeleteFile(r.Context(), projectID, filePath); err != nil {
 		var projectNotFoundError *project.ProjectNotFoundError
 		if errors.As(err, &projectNotFoundError) {
 			http.Error(w, projectNotFoundError.Error(), http.StatusNotFound)
