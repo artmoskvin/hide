@@ -43,7 +43,7 @@ type FileManager interface {
 	ReadFile(ctx context.Context, fs afero.Fs, path string, props ReadProps) (model.File, error)
 	UpdateFile(ctx context.Context, fs afero.Fs, path, content string) (model.File, error)
 	DeleteFile(ctx context.Context, fs afero.Fs, path string) error
-	ListFiles(ctx context.Context, fs afero.Fs) ([]model.File, error)
+	ListFiles(ctx context.Context, fs afero.Fs, showHidden bool) ([]model.File, error)
 	ApplyPatch(ctx context.Context, fs afero.Fs, path, patch string) (model.File, error)
 	UpdateLines(ctx context.Context, fs afero.Fs, path string, lineDiff LineDiffChunk) (model.File, error)
 }
@@ -146,7 +146,7 @@ func (fm *FileManagerImpl) DeleteFile(ctx context.Context, fs afero.Fs, path str
 	return fs.Remove(path)
 }
 
-func (fm *FileManagerImpl) ListFiles(ctx context.Context, fs afero.Fs) ([]model.File, error) {
+func (fm *FileManagerImpl) ListFiles(ctx context.Context, fs afero.Fs, showHidden bool) ([]model.File, error) {
 	log.Debug().Msg("Listing files")
 
 	var files []model.File
@@ -156,6 +156,13 @@ func (fm *FileManagerImpl) ListFiles(ctx context.Context, fs afero.Fs) ([]model.
 		if err != nil {
 			log.Error().Err(err).Msgf("Error walking file tree on path %s", path)
 			return fmt.Errorf("Error walking file tree on path %s: %w", path, err)
+		}
+
+		if !showHidden && isHidden(path) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		if !info.IsDir() {
@@ -322,4 +329,9 @@ func replaceSlice(original []string, replacement []string, start, end int) []str
 	copy(result[start+len(replacement):], original[end:])
 
 	return result
+}
+
+func isHidden(path string) bool {
+	name := filepath.Base(path)
+	return strings.HasPrefix(name, ".") && name != "." && name != ".."
 }

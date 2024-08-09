@@ -23,7 +23,7 @@ type MockProjectManager struct {
 	ReadFileFunc         func(ctx context.Context, projectId, path string, props files.ReadProps) (model.File, error)
 	UpdateFileFunc       func(ctx context.Context, projectId, path, content string) (model.File, error)
 	DeleteFileFunc       func(ctx context.Context, projectId, path string) error
-	ListFilesFunc        func(ctx context.Context, projectId string) ([]model.File, error)
+	ListFilesFunc        func(ctx context.Context, projectId string, showHidden bool) ([]model.File, error)
 	ApplyPatchFunc       func(ctx context.Context, projectId, path, patch string) (model.File, error)
 	UpdateLinesFunc      func(ctx context.Context, projectId, path string, lineDiff files.LineDiffChunk) (model.File, error)
 }
@@ -72,8 +72,8 @@ func (m *MockProjectManager) DeleteFile(ctx context.Context, projectId, path str
 	return m.DeleteFileFunc(ctx, projectId, path)
 }
 
-func (m *MockProjectManager) ListFiles(ctx context.Context, projectId string) ([]model.File, error) {
-	return m.ListFilesFunc(ctx, projectId)
+func (m *MockProjectManager) ListFiles(ctx context.Context, projectId string, showHidden bool) ([]model.File, error) {
+	return m.ListFilesFunc(ctx, projectId, showHidden)
 }
 
 func (m *MockProjectManager) ApplyPatch(ctx context.Context, projectId, path, patch string) (model.File, error) {

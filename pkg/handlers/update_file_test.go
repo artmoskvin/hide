@@ -96,7 +96,7 @@ func TestUpdateFileHandler_Success(t *testing.T) {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 
-			if actual != tt.expected {
+			if !actual.Equals(&tt.expected) {
 				t.Errorf("Expected file %+v, got %+v", tt.expected, actual)
 			}
 		})

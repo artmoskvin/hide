@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 
 	"github.com/artmoskvin/hide/pkg/files"
 	"github.com/artmoskvin/hide/pkg/project"
@@ -64,36 +62,4 @@ func (h ReadFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(file)
-}
-
-func parseIntQueryParam(params url.Values, paramName string, defaultValue int) (int, error) {
-	param := params.Get(paramName)
-
-	if param == "" {
-		return defaultValue, nil
-	}
-
-	value, err := strconv.Atoi(param)
-
-	if err != nil {
-		return 0, fmt.Errorf("Failed to parse %s: %w", paramName, err)
-	}
-
-	return value, nil
-}
-
-func parseBoolQueryParam(params url.Values, paramName string, defaultValue bool) (bool, error) {
-	param := params.Get(paramName)
-
-	if param == "" {
-		return defaultValue, nil
-	}
-
-	value, err := strconv.ParseBool(param)
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to parse %s: %w", paramName, err)
-	}
-
-	return value, nil
 }

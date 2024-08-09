@@ -69,7 +69,7 @@ func TestManagerImpl_CreateProject(t *testing.T) {
 
 func TestManagerImpl_GetProject_Succeeds(t *testing.T) {
 	_project := model.Project{Id: "test-project", Path: "/tmp/test-project", Config: model.Config{}}
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil, nil, nil)
 	project, err := pm.GetProject("test-project")
 
 	if err != nil {
@@ -82,7 +82,7 @@ func TestManagerImpl_GetProject_Succeeds(t *testing.T) {
 }
 
 func TestManagerImpl_GetProject_Fails(t *testing.T) {
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil, nil, nil)
 	_, err := pm.GetProject("missing-project")
 
 	if err == nil {
@@ -107,7 +107,7 @@ func TestManagerImpl_ResolveTaskAlias_Succeeds(t *testing.T) {
 			},
 		},
 	}
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil, nil, nil)
 	resolvedTask, err := pm.ResolveTaskAlias("test-project", "test-alias")
 
 	if err != nil {
@@ -120,7 +120,7 @@ func TestManagerImpl_ResolveTaskAlias_Succeeds(t *testing.T) {
 }
 
 func TestManagerImpl_ResolveTaskAlias_ProjectNotFound(t *testing.T) {
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil, nil, nil)
 	_, err := pm.ResolveTaskAlias("missing-project", "test-alias")
 
 	if err == nil {
@@ -130,7 +130,7 @@ func TestManagerImpl_ResolveTaskAlias_ProjectNotFound(t *testing.T) {
 
 func TestManagerImpl_ResolveTaskAlias_TaskNotFound(t *testing.T) {
 	_project := model.Project{Id: "test-project", Path: "/tmp/test-project", Config: model.Config{}}
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{"test-project": &_project}), "/tmp", nil, nil, nil)
 	_, err := pm.ResolveTaskAlias("test-project", "missing-alias")
 
 	if err == nil {
@@ -145,7 +145,7 @@ func TestManagerImpl_CreateTask(t *testing.T) {
 		ExecFunc: func(containerId string, command []string) (devcontainer.ExecResult, error) {
 			return devcontainer.ExecResult{StdOut: "test-stdout", StdErr: "test-stderr", ExitCode: 1}, nil
 		}}
-	pm := project.NewProjectManager(devContainerRunner, project.NewInMemoryStore(map[string]*model.Project{projectId: &_project}), "/tmp", nil)
+	pm := project.NewProjectManager(devContainerRunner, project.NewInMemoryStore(map[string]*model.Project{projectId: &_project}), "/tmp", nil, nil, nil)
 
 	taskResult, err := pm.CreateTask(projectId, "echo test")
 
@@ -161,7 +161,7 @@ func TestManagerImpl_CreateTask(t *testing.T) {
 }
 
 func TestManagerImpl_CreateTask_ProjectNotFound(t *testing.T) {
-	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil)
+	pm := project.NewProjectManager(nil, project.NewInMemoryStore(map[string]*model.Project{}), "/tmp", nil, nil, nil)
 	_, err := pm.CreateTask("missing-project", "echo test")
 
 	if err == nil {
@@ -177,7 +177,7 @@ func TestManagerImpl_CreateTask_ExecError(t *testing.T) {
 			return devcontainer.ExecResult{}, errors.New("exec error")
 		},
 	}
-	pm := project.NewProjectManager(devContainerRunner, project.NewInMemoryStore(map[string]*model.Project{projectId: &_project}), "/tmp", nil)
+	pm := project.NewProjectManager(devContainerRunner, project.NewInMemoryStore(map[string]*model.Project{projectId: &_project}), "/tmp", nil, nil, nil)
 
 	_, err := pm.CreateTask(projectId, "echo test")
 

@@ -18,7 +18,14 @@ type ListFilesHandler struct {
 
 func (h ListFilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	projectId := r.PathValue("id")
-	files, err := h.ProjectManager.ListFiles(r.Context(), projectId)
+	showHidden, err := parseBoolQueryParam(r.URL.Query(), "showHidden", false)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	files, err := h.ProjectManager.ListFiles(r.Context(), projectId, showHidden)
 
 	if err != nil {
 		var projectNotFoundError *project.ProjectNotFoundError

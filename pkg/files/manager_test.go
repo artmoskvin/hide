@@ -182,7 +182,7 @@ func TestFileManagerImpl_ReadFile_Success(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if actual != tt.expected {
+			if !actual.Equals(&tt.expected) {
 				t.Errorf("Expected %+v, got %+v", tt.expected, actual)
 			}
 		})
@@ -292,7 +292,7 @@ func TestFileManagerImpl_ApplyPatch_Success(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if actual != tt.expected {
+			if !actual.Equals(&tt.expected) {
 				t.Errorf("Expected %+v, got %+v", tt.expected, actual)
 			}
 		})
@@ -419,7 +419,7 @@ func TestFileManagerImpl_UpdateLines_Success(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if actual != tt.expected {
+			if !actual.Equals(&tt.expected) {
 				t.Errorf("Expected %+v, got %+v", tt.expected, actual)
 			}
 		})
@@ -492,7 +492,7 @@ func TestUpdateFile_Success(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			if actual != tt.expected {
+			if !actual.Equals(&tt.expected) {
 				t.Errorf("Expected %+v, got %+v", tt.expected, actual)
 			}
 		})

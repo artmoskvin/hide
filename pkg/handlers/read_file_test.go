@@ -79,7 +79,7 @@ func TestReadFileHandler_Success(t *testing.T) {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 
-			if respFile != tt.expectedFile {
+			if !respFile.Equals(&tt.expectedFile) {
 				t.Errorf("Expected file %+v, got %+v", tt.expectedFile, respFile)
 			}
 		})
