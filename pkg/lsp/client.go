@@ -21,7 +21,8 @@ func (h *lspHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonr
 		if err := json.Unmarshal(*req.Params, &params); err != nil {
 			return nil, err
 		}
-		h.diagnosticsHandler(params)
+		// Handler will block until completion, enables faster unblocking
+		go h.diagnosticsHandler(params)
 	}
 	return nil, nil
 }
@@ -46,10 +47,17 @@ func NewClient(server Process, diagnosticsChannel chan protocol.PublishDiagnosti
 	handler := &lspHandler{
 		diagnosticsHandler: func(params protocol.PublishDiagnosticsParams) {
 			diagnosticsChannel <- params
+			// TODO: let's see if that can cause issues, typically sender closes the chanel
 		},
 	}
+
 	conn := NewConnection(context.Background(), server.ReadWriteCloser(), jsonrpc2.HandlerWithError(handler.Handle))
-	return &ClientImpl{conn: conn, server: server, diagnosticsChannel: diagnosticsChannel}
+
+	return &ClientImpl{
+		conn:               conn,
+		server:             server,
+		diagnosticsChannel: diagnosticsChannel,
+	}
 }
 
 func (c *ClientImpl) GetWorkspaceSymbols(ctx context.Context, params protocol.WorkspaceSymbolParams) ([]protocol.SymbolInformation, error) {
@@ -95,6 +103,5 @@ func (c *ClientImpl) Shutdown(ctx context.Context) error {
 		return err
 	}
 
-	close(c.diagnosticsChannel)
 	return c.server.Wait()
 }

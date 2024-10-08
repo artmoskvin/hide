@@ -11,11 +11,13 @@ import (
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
-type ProjectId = string
-type LanguageId = string
-type ProjectRoot = string
-type LspClientStore = map[ProjectId]map[LanguageId]Client
-type LspDiagnostics = map[ProjectId]map[protocol.DocumentUri][]protocol.Diagnostic
+type (
+	ProjectId      = string
+	LanguageId     = string
+	ProjectRoot    = string
+	LspClientStore = map[ProjectId]map[LanguageId]Client
+	LspDiagnostics = map[ProjectId]map[protocol.DocumentUri][]protocol.Diagnostic
+)
 
 var LspServerExecutables = map[LanguageId]Command{
 	Go:         NewCommand("gopls", []string{}),
@@ -41,6 +43,7 @@ type ServiceImpl struct {
 	clientPool           ClientPool
 	diagnosticsStore     *DiagnosticsStore
 	lspServerExecutables map[LanguageId]Command
+	done                 chan<- struct{} // send only chanel for shut down
 }
 
 // StartServer implements Service.
@@ -94,7 +97,6 @@ func (s *ServiceImpl) StartServer(ctx context.Context, languageId LanguageId) er
 			},
 		},
 	})
-
 	if err != nil {
 		log.Error().Str("languageId", languageId).Str("projectId", projectId).Err(err).Msg("Failed to initialize language server")
 		return fmt.Errorf("Failed to initialize language server: %w", err)
@@ -116,8 +118,10 @@ func (s *ServiceImpl) StartServer(ctx context.Context, languageId LanguageId) er
 
 	s.clientPool.Set(projectId, languageId, client)
 
-	// TODO: kill this goroutine when the project is deleted
-	go s.listenForDiagnostics(projectId, diagnosticsChannel)
+	done := make(chan struct{})
+	go s.listenForDiagnostics(projectId, diagnosticsChannel, done)
+	s.done = done
+
 	return nil
 }
 
@@ -141,6 +145,8 @@ func (s *ServiceImpl) StopServer(ctx context.Context, languageId LanguageId) err
 	}
 
 	s.clientPool.Delete(project.Id, languageId)
+	s.done <- struct{}{} // shut down listenForDiagnostics
+	close(s.done)        // sender must close the channel
 
 	return nil
 }
@@ -301,6 +307,10 @@ func (s *ServiceImpl) CleanupProject(ctx context.Context, projectId ProjectId) e
 
 	s.clientPool.DeleteAllForProject(projectId)
 	s.diagnosticsStore.DeleteAllForProject(projectId)
+
+	s.done <- struct{}{} // shut down listenForDiagnostics
+	close(s.done)        // sender must close the channel
+
 	return nil
 }
 
@@ -336,7 +346,7 @@ func (s *ServiceImpl) getClients(ctx context.Context) []Client {
 	return clients
 }
 
-func (s *ServiceImpl) listenForDiagnostics(projectId ProjectId, channel chan protocol.PublishDiagnosticsParams) {
+func (s *ServiceImpl) listenForDiagnostics(projectId ProjectId, channel chan protocol.PublishDiagnosticsParams, done chan struct{}) {
 	for {
 		select {
 		case diagnostics := <-channel:
@@ -344,6 +354,10 @@ func (s *ServiceImpl) listenForDiagnostics(projectId ProjectId, channel chan pro
 			log.Debug().Str("projectId", projectId).Str("uri", diagnostics.URI).Msgf("Diagnostics: %+v", diagnostics.Diagnostics)
 
 			s.updateDiagnostics(projectId, diagnostics)
+		case <-done:
+			// TODO: probably no the best place
+			close(channel)
+			return
 		}
 	}
 }
