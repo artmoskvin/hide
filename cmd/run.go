@@ -124,8 +124,6 @@ var runCmd = &cobra.Command{
 		server := &http.Server{
 			Handler:      router,
 			Addr:         addr,
-			WriteTimeout: 120 * time.Second,
-			ReadTimeout:  120 * time.Second,
 		}
 
 		log.Info().Msgf("Server started on %s\n", addr)
