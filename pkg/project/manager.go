@@ -99,18 +99,38 @@ func (pm ManagerImpl) CreateProject(ctx context.Context, request CreateProjectRe
 		projectId := pm.randomString(10)
 		projectPath := path.Join(pm.projectsRoot, projectId)
 
-		// Clone git repo
 		if err := pm.createProjectDir(projectPath); err != nil {
 			log.Error().Err(err).Msg("Failed to create project directory")
 			c <- result.Failure[model.Project](fmt.Errorf("Failed to create project directory: %w", err))
 			return
 		}
 
-		if r := <-cloneGitRepo(request.Repository, projectPath); r.IsFailure() {
-			log.Error().Err(r.Error).Msg("Failed to clone git repo")
-			removeProjectDir(projectPath)
-			c <- result.Failure[model.Project](fmt.Errorf("Failed to clone git repo: %w", r.Error))
-			return
+		if strings.HasPrefix(request.Repository.Url, "file") {
+			localPath := request.Repository.Url[7:]
+			if !strings.HasSuffix(localPath, "/") {
+				localPath += "/"
+			}
+
+			log.Debug().Msgf("Creating project from %s", localPath)
+
+			cmd := exec.Command("cp", "-R", localPath, projectPath)
+			cmdOut, err := cmd.Output()
+			if err != nil {
+				log.Error().Err(err).Msg("failed copying local project")
+				removeProjectDir(projectPath)
+				c <- result.Failure[model.Project](fmt.Errorf("failed copying local project: %w", err))
+				return
+			}
+
+			log.Debug().Msgf("copying output: %s", string(cmdOut))
+		} else {
+			// Clone git repo
+			if r := <-cloneGitRepo(request.Repository, projectPath); r.IsFailure() {
+				log.Error().Err(r.Error).Msg("Failed to clone git repo")
+				removeProjectDir(projectPath)
+				c <- result.Failure[model.Project](fmt.Errorf("Failed to clone git repo: %w", r.Error))
+				return
+			}
 		}
 
 		// Start devcontainer
