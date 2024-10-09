@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hide-org/hide/pkg/files"
@@ -49,7 +50,7 @@ func TestListFilesHandler_ServeHTTP(t *testing.T) {
 			},
 			wantStatusCode: http.StatusOK,
 			asText:         true,
-			wantBody:       ".\n├── file1.txt\n└── file2.txt\n",
+			wantBody:       ".\n├── file1.txt\n└── file2.txt",
 		},
 		{
 			name:   "successful listing with hidden",
@@ -128,7 +129,7 @@ func TestListFilesHandler_ServeHTTP(t *testing.T) {
 			router.ServeHTTP(rr, req)
 
 			assert.Equal(t, tt.wantStatusCode, rr.Code)
-			assert.Contains(t, rr.Body.String(), tt.wantBody)
+			assert.Equal(t, strings.TrimSuffix(rr.Body.String(), "\n"), tt.wantBody)
 		})
 	}
 }
