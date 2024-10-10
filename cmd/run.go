@@ -15,6 +15,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/hide-org/hide/pkg/devcontainer"
 	"github.com/hide-org/hide/pkg/files"
+	"github.com/hide-org/hide/pkg/git"
 	"github.com/hide-org/hide/pkg/gitignore"
 	"github.com/hide-org/hide/pkg/handlers"
 	"github.com/hide-org/hide/pkg/lsp"
@@ -25,13 +26,15 @@ import (
 	"github.com/hide-org/hide/pkg/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
 const (
-	HidePath          = ".hide"
-	ProjectsDir       = "projects"
-	DefaultDotEnvPath = ".env"
+	HidePath           = ".hide"
+	ProjectsDir        = "projects"
+	DefaultDotEnvPath  = ".env"
+	RepositoryCacheDir = "repositories"
 )
 
 var (
@@ -95,13 +98,17 @@ var runCmd = &cobra.Command{
 		}
 
 		projectsDir := filepath.Join(home, HidePath, ProjectsDir)
+		repositoryCacheDir := filepath.Join(home, HidePath, RepositoryCacheDir)
 
 		fileManager := files.NewFileManager(gitignore.NewMatcherFactory())
 		languageDetector := lsp.NewLanguageDetector()
 		diagnosticsStore := lsp.NewDiagnosticsStore()
 		clientPool := lsp.NewClientPool()
 		lspService := lsp.NewService(languageDetector, lsp.LspServerExecutables, diagnosticsStore, clientPool)
-		projectManager := project.NewProjectManager(containerRunner, projectStore, projectsDir, fileManager, lspService, languageDetector, random.String)
+		gitClient := git.NewClientImpl()
+		gitCache := git.NewFsCache(afero.NewOsFs(), repositoryCacheDir, git.Clone)
+		gitService := git.NewService(gitClient, gitCache)
+		projectManager := project.NewProjectManager(containerRunner, projectStore, projectsDir, fileManager, lspService, languageDetector, random.String, gitService)
 		validator := validator.New(validator.WithRequiredStructEnabled())
 
 		router := handlers.

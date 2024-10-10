@@ -5,21 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"sync"
 	"time"
 
 	"github.com/hide-org/hide/pkg/devcontainer"
 	"github.com/hide-org/hide/pkg/files"
+	"github.com/hide-org/hide/pkg/git"
 	"github.com/hide-org/hide/pkg/lsp"
 	"github.com/hide-org/hide/pkg/model"
 	"github.com/hide-org/hide/pkg/result"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 
 	"github.com/rs/zerolog/log"
-
 	"github.com/spf13/afero"
 )
 
@@ -68,6 +68,7 @@ type ManagerImpl struct {
 	lspService         lsp.Service
 	languageDetector   lsp.LanguageDetector
 	randomString       func(int) string
+	git                git.Service
 }
 
 func NewProjectManager(
@@ -78,6 +79,7 @@ func NewProjectManager(
 	lspService lsp.Service,
 	languageDetector lsp.LanguageDetector,
 	randomString func(int) string,
+	git git.Service,
 ) Manager {
 	return ManagerImpl{
 		devContainerRunner: devContainerRunner,
@@ -87,6 +89,7 @@ func NewProjectManager(
 		lspService:         lspService,
 		languageDetector:   languageDetector,
 		randomString:       randomString,
+		git:                git,
 	}
 }
 
@@ -94,23 +97,37 @@ func (pm ManagerImpl) CreateProject(ctx context.Context, request CreateProjectRe
 	c := make(chan result.Result[model.Project])
 
 	go func() {
-		log.Debug().Msgf("Creating project for repo %s", request.Repository.Url)
+		log.Debug().Str("url", request.Repository.Url).Msg("Creating project for repo")
 
 		projectId := pm.randomString(10)
 		projectPath := path.Join(pm.projectsRoot, projectId)
 
-		// Clone git repo
 		if err := pm.createProjectDir(projectPath); err != nil {
-			log.Error().Err(err).Msg("Failed to create project directory")
+			log.Error().Err(err).Str("path", projectPath).Msg("Failed to create project directory")
 			c <- result.Failure[model.Project](fmt.Errorf("Failed to create project directory: %w", err))
 			return
 		}
 
-		if r := <-cloneGitRepo(request.Repository, projectPath); r.IsFailure() {
-			log.Error().Err(r.Error).Msg("Failed to clone git repo")
+		// Clone git repo
+		pathUrl, _ := url.Parse(projectPath)
+		pathUrl.Scheme = "file"
+		repoURL, _ := url.Parse(request.Repository.Url)
+		repo, err := pm.git.Clone(*repoURL, *pathUrl)
+		if err != nil {
+			log.Error().Err(err).Str("url", request.Repository.Url).Msg("Failed to clone git repo")
 			removeProjectDir(projectPath)
-			c <- result.Failure[model.Project](fmt.Errorf("Failed to clone git repo: %w", r.Error))
+			c <- result.Failure[model.Project](fmt.Errorf("Failed to clone git repo: %w", err))
 			return
+		}
+
+		if request.Repository.Commit != nil {
+			log.Debug().Str("commit", *request.Repository.Commit).Msg("Checking out commit")
+			if err := pm.git.Checkout(repo, *request.Repository.Commit); err != nil {
+				log.Error().Err(err).Str("commit", *request.Repository.Commit).Msg("Failed to checkout commit")
+				removeProjectDir(projectPath)
+				c <- result.Failure[model.Project](fmt.Errorf("Failed to checkout commit %s: %w", *request.Repository.Commit, err))
+				return
+			}
 		}
 
 		// Start devcontainer
@@ -121,7 +138,7 @@ func (pm ManagerImpl) CreateProject(ctx context.Context, request CreateProjectRe
 		} else {
 			config, err := pm.configFromProject(os.DirFS(projectPath))
 			if err != nil {
-				log.Error().Err(err).Msgf("Failed to get devcontainer config from repository %s", request.Repository.Url)
+				log.Error().Err(err).Str("url", request.Repository.Url).Msg("Failed to get devcontainer config from repository")
 				removeProjectDir(projectPath)
 				c <- result.Failure[model.Project](fmt.Errorf("Failed to read devcontainer.json: %w", err))
 				return
@@ -165,7 +182,7 @@ func (pm ManagerImpl) CreateProject(ctx context.Context, request CreateProjectRe
 			return
 		}
 
-		log.Debug().Msgf("Created project %s for repo %s", projectId, request.Repository.Url)
+		log.Debug().Str("projectId", projectId).Str("url", request.Repository.Url).Msg("Created project")
 
 		c <- result.Success(project)
 	}()
@@ -567,36 +584,36 @@ func removeProjectDir(projectPath string) {
 	return
 }
 
-func cloneGitRepo(repository Repository, projectPath string) <-chan result.Empty {
-	log.Debug().Str("url", repository.Url).Msg("Cloning git repo")
-	c := make(chan result.Empty)
-
-	go func() {
-		cmd := exec.Command("git", "clone", repository.Url, projectPath)
-		cmdOut, err := cmd.Output()
-		if err != nil {
-			c <- result.EmptyFailure(fmt.Errorf("Failed to clone git repo: %w", err))
-			return
-		}
-
-		log.Debug().Str("url", repository.Url).Msgf("Cloned git repo to %s", projectPath)
-		log.Debug().Msg(string(cmdOut))
-
-		if repository.Commit != nil {
-			cmd = exec.Command("git", "checkout", *repository.Commit)
-			cmd.Dir = projectPath
-			cmdOut, err = cmd.Output()
-			if err != nil {
-				c <- result.EmptyFailure(fmt.Errorf("Failed to checkout commit %s: %w", *repository.Commit, err))
-				return
-			}
-
-			log.Debug().Msgf("Checked out commit %s", *repository.Commit)
-			log.Debug().Msg(string(cmdOut))
-		}
-
-		c <- result.EmptySuccess()
-	}()
-
-	return c
-}
+// func cloneGitRepo(repository Repository, projectPath string) <-chan result.Empty {
+// 	log.Debug().Str("url", repository.Url.String()).Msg("Cloning git repo")
+// 	c := make(chan result.Empty)
+//
+// 	go func() {
+// 		cmd := exec.Command("git", "clone", repository.Url, projectPath)
+// 		cmdOut, err := cmd.Output()
+// 		if err != nil {
+// 			c <- result.EmptyFailure(fmt.Errorf("Failed to clone git repo: %w", err))
+// 			return
+// 		}
+//
+// 		log.Debug().Str("url", repository.Url).Msgf("Cloned git repo to %s", projectPath)
+// 		log.Debug().Msg(string(cmdOut))
+//
+// 		if repository.Commit != nil {
+// 			cmd = exec.Command("git", "checkout", *repository.Commit)
+// 			cmd.Dir = projectPath
+// 			cmdOut, err = cmd.Output()
+// 			if err != nil {
+// 				c <- result.EmptyFailure(fmt.Errorf("Failed to checkout commit %s: %w", *repository.Commit, err))
+// 				return
+// 			}
+//
+// 			log.Debug().Msgf("Checked out commit %s", *repository.Commit)
+// 			log.Debug().Msg(string(cmdOut))
+// 		}
+//
+// 		c <- result.EmptySuccess()
+// 	}()
+//
+// 	return c
+// }
